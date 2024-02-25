@@ -12,8 +12,8 @@ from Crypto import Random
 
 from constants import MAX_INACTIVE_TIME, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX
 from encrypter import ENCODING, decrypt_path, decrypt, decrypt_stream, BinaryIOBytesInStream, BinaryIOBytesOutStream, \
-    InMemoryBytesOutStream, encrypt, encrypt_name, decrypt_name, convert_size_of_encrypted_to_real_size, encrypt_stream, \
-    encrypt_content
+    InMemoryBytesOutStream, encrypt, encrypt_name, decrypt_name, convert_size_of_encrypted_to_real_size, \
+    encrypt_stream, encrypt_content
 
 LAST_ACCESS_TIME = datetime.datetime.fromtimestamp(1)
 KEY: Optional[bytes] = None
@@ -32,9 +32,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 def validate_timeout():
-    global KEY, LAST_ACCESS_TIME
+    global KEY
     if (datetime.datetime.now() - LAST_ACCESS_TIME).seconds >= MAX_INACTIVE_TIME:
         KEY = None
+    update_last_access_time()
+
+
+def update_last_access_time():
+    global LAST_ACCESS_TIME
     LAST_ACCESS_TIME = datetime.datetime.now()
 
 
@@ -138,7 +143,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             <a href="{CHANGE_PASSWORD_PAGE}" style="margin-left: 5px">Change password</a>
             <br/>
             <h2>Current Directory: {decrypt_path(KEY, self.path)}</h2>
-            
+
             <form method='POST' action='save' enctype=multipart/form-data>
                 <input required name='file' type='file' multiple/>
                 <input type='submit' value='Add'/>
@@ -204,7 +209,11 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             with open(path, 'rb') as f:
-                decrypt_stream(KEY, BinaryIOBytesInStream(f), BinaryIOBytesOutStream(self.wfile), start)
+                decrypt_stream(KEY,
+                               BinaryIOBytesInStream(f),
+                               BinaryIOBytesOutStream(self.wfile),
+                               start,
+                               update_last_access_time)
         except ConnectionError:
             pass
 
@@ -259,7 +268,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                 <script>
                     let image = document.getElementById('image'),
                         flag = true
-                        
+
                     image.style['max-width'] = '1200px'
                     image.style['max-height'] = '720px'
                     image.onclick = () => {
@@ -374,7 +383,8 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         self.send_main_page()
 
     def process_save(self):
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers,
+        form = cgi.FieldStorage(fp=self.rfile,
+                                headers=self.headers,
                                 environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers['Content-Type']})
 
         files = form['file']
@@ -469,9 +479,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     httpd = None
     try:
-        if not os.path.exists(KEY_PATH) \
-                and os.path.exists(CONTENT_PATH) \
-                and len(os.listdir(CONTENT_PATH)) > 0:
+        if not os.path.exists(KEY_PATH) and os.path.exists(CONTENT_PATH) and len(os.listdir(CONTENT_PATH)) > 0:
             print(f'{KEY_PATH} doesnt exist. Cant open content without it.')
             exit(-1)
 

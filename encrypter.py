@@ -2,7 +2,7 @@ import base64
 import os
 from math import ceil
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Callable
 
 from Crypto import Random
 from Crypto.Cipher import AES
@@ -115,7 +115,11 @@ def encrypt_stream(key: str | bytes, in_stream: BytesInStream, out_stream: Bytes
         out_stream.write(buf)
 
 
-def decrypt_stream(key: str | bytes, in_stream: BytesInStream, out_stream: BytesOutStream, start: int = 0):
+def decrypt_stream(key: str | bytes,
+                   in_stream: BytesInStream,
+                   out_stream: BytesOutStream,
+                   start: int = 0,
+                   iterate_callback: Callable = ()):
     if start != 0:
         chunk_count = start // CHUNK_SIZE
 
@@ -124,9 +128,11 @@ def decrypt_stream(key: str | bytes, in_stream: BytesInStream, out_stream: Bytes
         buf = decrypt(key, buf)
         buf = buf[start - (CHUNK_SIZE * chunk_count):]
 
+        iterate_callback()
         out_stream.write(buf)
 
     while True:
+        iterate_callback()
         buf = in_stream.read(DECRYPT_CHUNK_SIZE)
         if not buf:
             break
