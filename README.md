@@ -12,7 +12,7 @@ Some files need to be stored in an encrypted format. While ZIP is convenient for
 To address these issues, I have created this web-based application. It stores files encrypted with chunks and allows
 users to access them through a browser, eliminating the need for dealing with large ZIP files.
 
-## Some info
+## Info
 
 - **WARNING!** This app is not safe for public use; it is intended for personal use on the computer where you run it.
   **DO NOT** open the app's port to the local or public network!
@@ -25,9 +25,13 @@ users to access them through a browser, eliminating the need for dealing with la
 - On the first run, the application will prompt you to set a password. You will use this password to log in on
   subsequent times.
 
+## Requirements
+
+- python >= 3.10 (Wasn't tested on python < 3.10) 
+
 ## Usage
 
-```
+```sh
 pip install -r requirements.txt
 python main.py
 ```
