@@ -1,6 +1,7 @@
 import os
 
 CONTENT_PATH = os.getcwd() + '/Content'
+TEMP_PATH = os.getcwd() + '/Temp'
 META_PATH = os.getcwd() + '/Meta'
 KEY_PATH = META_PATH + '/key'
 MAX_INACTIVE_TIME_SECONDS = 5 * 60

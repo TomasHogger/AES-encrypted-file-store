@@ -2,6 +2,7 @@ import cgi
 import collections.abc
 import datetime
 import os
+import shutil
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -10,7 +11,8 @@ from urllib import parse
 import webbrowser
 from Crypto import Random
 
-from constants import MAX_INACTIVE_TIME_SECONDS, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX
+from constants import MAX_INACTIVE_TIME_SECONDS, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX, \
+    TEMP_PATH
 from encrypter import ENCODING, decrypt_path, decrypt, decrypt_stream, BinaryIOBytesInStream, BinaryIOBytesOutStream, \
     InMemoryBytesOutStream, encrypt, encrypt_name, decrypt_name, convert_size_of_encrypted_to_real_size, \
     encrypt_stream, encrypt_content
@@ -18,12 +20,15 @@ from encrypter import ENCODING, decrypt_path, decrypt, decrypt_stream, BinaryIOB
 LAST_ACCESS_TIME = datetime.datetime.fromtimestamp(1)
 KEY: Optional[bytes] = None
 
+FAVICON = 'favicon.ico'
+
 LOGIN_PAGE = '/login'
 LOGOUT_PAGE = '/logout'
 CHANGE_PASSWORD_PAGE = '/change_password'
+
 SAVE_REQUEST = '/save'
 PROCESS_NOT_ENCRYPTED_REQUEST = '/process_not_encrypted'
-FAVICON = 'favicon.ico'
+CLEAR_TEMP_REQUEST = '/clear_temp'
 
 LOGOUT_EL = f'<a id="logout" href="{LOGOUT_PAGE}">Logout</a>'
 # noinspection JSUnresolvedReference
@@ -162,6 +167,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             {'' if self.path == '/' else '<a style="margin-left: 5px" href="..">Back</a>'}
             <a href="{PROCESS_NOT_ENCRYPTED_REQUEST}" style="margin-left: 5px">Process not encrypted</a>
             <a href="{CHANGE_PASSWORD_PAGE}" style="margin-left: 5px">Change password</a>
+            <a href="{CLEAR_TEMP_REQUEST}" style="margin-left: 5px">Clear temp</a>
             <br/>
             <h2>Current Directory: {decrypt_path(KEY, self.path)}</h2>
 
@@ -422,6 +428,11 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         encrypt_content(KEY, self.translate_path(self.path.rsplit('/', 1)[0]))
         self.send_preview_page()
 
+    def process_clear_temp(self):
+        shutil.rmtree(TEMP_PATH)
+        os.makedirs(TEMP_PATH, exist_ok=True)
+        self.send_preview_page()
+
     def do_POST(self):
         global KEY
 
@@ -469,6 +480,10 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
             if self.path.endswith(PROCESS_NOT_ENCRYPTED_REQUEST):
                 self.process_not_encrypted()
+                return
+
+            if self.path.endswith(CLEAR_TEMP_REQUEST):
+                self.process_clear_temp()
                 return
 
             if self.path.endswith(CHANGE_PASSWORD_PAGE):
