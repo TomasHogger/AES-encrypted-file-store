@@ -115,11 +115,16 @@ def encrypt_stream(key: str | bytes, in_stream: BytesInStream, out_stream: Bytes
         out_stream.write(buf)
 
 
+def empty():
+    # empty
+    pass
+
+
 def decrypt_stream(key: str | bytes,
                    in_stream: BytesInStream,
                    out_stream: BytesOutStream,
                    start: int = 0,
-                   iterate_callback: Callable = ()):
+                   iterate_callback: Callable = empty):
     if start != 0:
         chunk_count = start // CHUNK_SIZE
 

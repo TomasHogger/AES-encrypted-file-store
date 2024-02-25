@@ -10,7 +10,7 @@ from urllib import parse
 import webbrowser
 from Crypto import Random
 
-from constants import MAX_INACTIVE_TIME, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX
+from constants import MAX_INACTIVE_TIME_SECONDS, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX
 from encrypter import ENCODING, decrypt_path, decrypt, decrypt_stream, BinaryIOBytesInStream, BinaryIOBytesOutStream, \
     InMemoryBytesOutStream, encrypt, encrypt_name, decrypt_name, convert_size_of_encrypted_to_real_size, \
     encrypt_stream, encrypt_content
@@ -21,10 +21,31 @@ KEY: Optional[bytes] = None
 LOGIN_PAGE = '/login'
 LOGOUT_PAGE = '/logout'
 CHANGE_PASSWORD_PAGE = '/change_password'
-LOGOUT_EL = f'<a href="{LOGOUT_PAGE}">Logout</a>'
 SAVE_REQUEST = '/save'
 PROCESS_NOT_ENCRYPTED_REQUEST = '/process_not_encrypted'
 FAVICON = 'favicon.ico'
+
+LOGOUT_EL = f'<a id="logout" href="{LOGOUT_PAGE}">Logout</a>'
+# noinspection JSUnresolvedReference
+# language=HTML
+AUTO_LOGOUT_EL = f'''<script>
+let inactiveTime = 0,
+    startTimer = () => setInterval(() => {{
+        inactiveTime++;
+        if (inactiveTime > {MAX_INACTIVE_TIME_SECONDS}) {{
+            document.getElementById('logout').click();
+        }}
+    }}, 1000),
+    timer = startTimer();
+
+window.onfocus = () => inactiveTime = 0;
+window.onclick = () => inactiveTime = 0;
+
+[...document.getElementsByTagName('video')].forEach(it => {{
+    it.addEventListener('play', () => clearInterval(timer));
+    it.addEventListener('pause', () => timer = startTimer());
+}});
+</script>'''
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -33,7 +54,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 def validate_timeout():
     global KEY
-    if (datetime.datetime.now() - LAST_ACCESS_TIME).seconds >= MAX_INACTIVE_TIME:
+    if (datetime.datetime.now() - LAST_ACCESS_TIME).seconds >= MAX_INACTIVE_TIME_SECONDS:
         KEY = None
     update_last_access_time()
 
@@ -149,6 +170,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                 <input type='submit' value='Add'/>
             </form>
             <br/>
+            {AUTO_LOGOUT_EL}
         ''']
 
         path = self.translate_path(self.path)
@@ -264,25 +286,23 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             resp.append(f'<img id="image" src="{name}"/>')
             resp.append(
                 # language=HTML
-                '''
-                <script>
-                    let image = document.getElementById('image'),
-                        flag = true
+                '''<script>
+                let image = document.getElementById('image'),
+                    flag = true;
 
-                    image.style['max-width'] = '1200px'
-                    image.style['max-height'] = '720px'
-                    image.onclick = () => {
-                        if (flag) {
-                            image.style['max-width'] = null
-                            image.style['max-height'] = null
-                        } else {
-                            image.style['max-width'] = '1200px'
-                            image.style['max-height'] = '720px'
-                        }
-                        flag = !flag
+                image.style['max-width'] = '1200px';
+                image.style['max-height'] = '720px';
+                image.onclick = () => {
+                    if (flag) {
+                        image.style['max-width'] = null;
+                        image.style['max-height'] = null;
+                    } else {
+                        image.style['max-width'] = '1200px';
+                        image.style['max-height'] = '720px';
                     }
-                </script>
-                '''
+                    flag = !flag;
+                }
+                </script>'''
             )
         else:
             resp.append('<pre>')
@@ -294,7 +314,8 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             resp.append(buf.buf.decode(ENCODING).replace('<', '&lt;').replace('>', '&gt;'))
             resp.append('</pre>')
 
-        resp.append('''
+        resp.append(f'''
+            {AUTO_LOGOUT_EL}
         </body>
         </html>
         ''')
