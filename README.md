@@ -14,9 +14,9 @@ users to access them through a browser, eliminating the need for dealing with la
 
 ## Some info
 
-- **WARNING!** This app is not safe for public use; it is intended for personal use on the computer where you run it. *
-  *DO NOT** open the app's port to the local or public network!
-- **WARNING!** Do not delete the `Meta/key` file; it's the main key of the app. If you lose it, you cannot decrypt
+- **WARNING!** This app is not safe for public use; it is intended for personal use on the computer where you run it.
+  **DO NOT** open the app's port to the local or public network!
+- **WARNING! DO NOT** delete the `Meta/key` file; it's the main key of the app. If you lose it, you cannot decrypt
   files!
 - The application starts on port 8000.
 - All magic constants are stored in `constants.py`.
