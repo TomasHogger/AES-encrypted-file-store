@@ -3,12 +3,13 @@ import collections.abc
 import datetime
 import os
 import shutil
+import webbrowser
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import Optional
 from urllib import parse
-import webbrowser
+
 from Crypto import Random
 
 from constants import MAX_INACTIVE_TIME_SECONDS, PORT, CONTENT_PATH, META_PATH, KEY_PATH, ENCRYPTED_FILE_PREFIX, \
@@ -26,9 +27,15 @@ LOGIN_PAGE = '/login'
 LOGOUT_PAGE = '/logout'
 CHANGE_PASSWORD_PAGE = '/change_password'
 
-SAVE_REQUEST = '/save'
-PROCESS_NOT_ENCRYPTED_REQUEST = '/process_not_encrypted'
-CLEAR_TEMP_REQUEST = '/clear_temp'
+SAVE_REQUEST = 'save'
+CREATE_REQUEST = 'create'
+PROCESS_NOT_ENCRYPTED_REQUEST = 'process_not_encrypted'
+CLEAR_TEMP_REQUEST = 'clear_temp'
+
+PASSWORD_PARAM = "password"
+AGAIN_PARAM = "again"
+DIR_PARAM = "dir"
+FILE_PARAM = "file"
 
 LOGOUT_EL = f'<a id="logout" href="{LOGOUT_PAGE}">Logout</a>'
 # noinspection JSUnresolvedReference
@@ -55,6 +62,40 @@ window.onclick = () => inactiveTime = 0;
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     pass
+
+
+class DirectoryEntry:
+    def __init__(self, name: str, relative_path: str):
+        self.name = name
+        self.relative_path = relative_path
+
+
+class Directory:
+    def __init__(self, path: str | Path):
+        self.path = path
+        self.dirs: list[DirectoryEntry] = []
+        self.files: list[DirectoryEntry] = []
+        self.not_encrypted: list[str] = []
+
+        self.init()
+
+    def init(self):
+        for entry in os.listdir(self.path):
+            if not entry.startswith(ENCRYPTED_FILE_PREFIX):
+                self.not_encrypted.append(entry)
+                continue
+
+            name = decrypt_name(KEY, entry)
+            if os.path.isdir(os.path.join(self.path, entry)):
+                self.dirs.append(DirectoryEntry(name, entry))
+            else:
+                self.files.append(DirectoryEntry(name, entry))
+
+    def sorted_dirs(self) -> list[DirectoryEntry]:
+        return sorted(self.dirs, key=lambda x: x.name)
+
+    def sorted_files(self) -> list[DirectoryEntry]:
+        return sorted(self.files, key=lambda x: x.name)
 
 
 def validate_timeout():
@@ -156,9 +197,11 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def send_directory(self):
+        # noinspection HtmlUnknownTarget
+        # language=HTML
         resp = [f'''
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
             <title>File List</title>
         </head>
@@ -171,35 +214,25 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             <br/>
             <h2>Current Directory: {decrypt_path(KEY, self.path)}</h2>
 
-            <form method='POST' action='save' enctype=multipart/form-data>
-                <input required name='file' type='file' multiple/>
-                <input type='submit' value='Add'/>
+            <form method="POST" action="{SAVE_REQUEST}" enctype=multipart/form-data>
+                <input required name="{FILE_PARAM}" type="file" multiple/>
+                <input type="submit" value="Add"/>
+            </form>
+            <form  method="POST" action="{CREATE_REQUEST}" style="margin-top: 5px">
+                <input required name="{DIR_PARAM}" placeholder="Directory" type="text"/>
+                <input type="submit" value="Create"/>
             </form>
             <br/>
             {AUTO_LOGOUT_EL}
         ''']
 
-        path = self.translate_path(self.path)
+        directory = Directory(self.translate_path(self.path))
 
-        dirs = []
-        files = []
-        not_encrypted = []
-        for entry in os.listdir(self.translate_path(self.path)):
-            if not entry.startswith(ENCRYPTED_FILE_PREFIX):
-                not_encrypted.append(entry)
-                continue
-
-            name = decrypt_name(KEY, entry)
-            if os.path.isdir(os.path.join(path, entry)):
-                dirs.append([entry, name])
-            else:
-                files.append([entry, name])
-
-        for e in dirs:
-            resp.append(f'<li><a href="{e[0]}/">[Dir] {e[1]}</a></li>')
-        for e in files:
-            resp.append(f'<li><a href="{e[0]}">{e[1]}</a></li>')
-        for e in not_encrypted:
+        for e in directory.sorted_dirs():
+            resp.append(f'<li><a href="{e.relative_path}/">[Dir] {e.name}</a></li>')
+        for e in directory.sorted_files():
+            resp.append(f'<li><a href="{e.relative_path}">{e.name}</a></li>')
+        for e in directory.not_encrypted:
             resp.append(f'<li>[Not encrypted] {e}</li>')
 
         resp.append('''
@@ -248,25 +281,27 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
     def send_page(self):
         path = Path(self.translate_path(self.path))
         name = path.name
-        directory = path.parent
+        directory = Directory(path.parent)
 
         prev_page = None
         next_page = None
         stop = False
-        for file in os.listdir(directory):
-            if os.path.isdir(directory.joinpath(file)):
+
+        for file in directory.sorted_files():
+            if os.path.isdir(directory.path.joinpath(file.relative_path)):
                 continue
             elif stop:
-                next_page = file
+                next_page = file.relative_path
                 break
-            elif file == name:
+            elif file.relative_path == name:
                 stop = True
             else:
-                prev_page = file
+                prev_page = file.relative_path
 
+        # language=HTML
         resp = [f'''
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
             <title>File</title>
         </head>
@@ -329,15 +364,17 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         self.send_text(resp)
 
     def send_login(self):
+        # noinspection HtmlUnknownTarget
+        # language=HTML
         self.send_text([f'''
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
                 <title>Login</title>
             </head>
             <body>
-                <form method='POST' action='{LOGIN_PAGE}'>
-                    <input required name='password' placeholder="Password" type='password'/>
+                <form method="POST" action="{LOGIN_PAGE}">
+                    <input required name="{PASSWORD_PARAM}" placeholder="Password" type="password"/>
                     <input type="submit" value="Login"/>
                 </form>
             </body>
@@ -362,16 +399,18 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         self.send_main_page()
 
     def send_change_password(self):
+        # noinspection HtmlUnknownTarget
+        # language=HTML
         self.send_text([f'''
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
                 <title>Login</title>
             </head>
             <body>
-                <form method='POST' action='{CHANGE_PASSWORD_PAGE}'>
-                    <input required name='password' placeholder="Password" type='password'/>
-                    <input required name='again' placeholder="Again" type='password'/>
+                <form method="POST" action="{CHANGE_PASSWORD_PAGE}">
+                    <input required name="{PASSWORD_PARAM}" placeholder="Password" type="password"/>
+                    <input required name="{AGAIN_PARAM}" placeholder="Again" type="password"/>
                     <input type="submit" value="Change"/>
                 </form>
             </body>
@@ -380,8 +419,8 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
     def process_change_password(self):
         form = self.get_form_data()
-        password = form['password']
-        again = form['again']
+        password = form[PASSWORD_PARAM]
+        again = form[AGAIN_PARAM]
 
         if password is None or password != again:
             self.send_reload()
@@ -414,7 +453,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                                 headers=self.headers,
                                 environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers['Content-Type']})
 
-        files = form['file']
+        files = form[FILE_PARAM]
         if not isinstance(files, list):
             files = [files]
 
@@ -433,6 +472,13 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         os.makedirs(TEMP_PATH, exist_ok=True)
         self.send_preview_page()
 
+    def process_create(self):
+        directory = self.get_form_data()[DIR_PARAM]
+        directory = encrypt_name(KEY, directory)
+        os.makedirs(Path(self.translate_path(self.path)).parent.joinpath(directory),
+                    exist_ok=True)
+        self.send_preview_page()
+
     def do_POST(self):
         global KEY
 
@@ -449,6 +495,10 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
             if self.path.endswith(SAVE_REQUEST):
                 self.process_save()
+                return
+
+            if self.path.endswith(CREATE_REQUEST):
+                self.process_create()
                 return
 
             if self.path.endswith(CHANGE_PASSWORD_PAGE):
