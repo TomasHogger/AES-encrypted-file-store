@@ -23,8 +23,13 @@ KEY: Optional[bytes] = None
 
 FAVICON = 'favicon.ico'
 
+LOGOUT = 'logout'
+NEXT = 'next'
+PREV = 'prev'
+BACK = 'back'
+
 LOGIN_PAGE = '/login'
-LOGOUT_PAGE = '/logout'
+LOGOUT_PAGE = '/' + LOGOUT
 CHANGE_PASSWORD_PAGE = '/change_password'
 
 SAVE_REQUEST = 'save'
@@ -37,15 +42,15 @@ AGAIN_PARAM = "again"
 DIR_PARAM = "dir"
 FILE_PARAM = "file"
 
-LOGOUT_EL = f'<a id="logout" href="{LOGOUT_PAGE}">Logout</a>'
+LOGOUT_EL = f'<a id={LOGOUT} href="{LOGOUT_PAGE}">Logout</a>'
 # noinspection JSUnresolvedReference
 # language=HTML
-AUTO_LOGOUT_EL = f'''<script>
+COMMON_SCRIPT = f'''<script>
 let inactiveTime = 0,
     startTimer = () => setInterval(() => {{
         inactiveTime++;
         if (inactiveTime > {MAX_INACTIVE_TIME_SECONDS}) {{
-            document.getElementById('logout').click();
+            document.getElementById("{LOGOUT}").click()
         }}
     }}, 1000),
     timer = startTimer();
@@ -53,10 +58,28 @@ let inactiveTime = 0,
 window.onfocus = () => inactiveTime = 0;
 window.onclick = () => inactiveTime = 0;
 
-[...document.getElementsByTagName('video')].forEach(it => {{
-    it.addEventListener('play', () => clearInterval(timer));
-    it.addEventListener('pause', () => timer = startTimer());
-}});
+document.querySelectorAll("video").forEach(it => {{
+    it.addEventListener("play", () => clearInterval(timer))
+    it.addEventListener("pause", () => timer = startTimer())
+}})
+
+window.onkeydown = (event) => {{
+    switch (event.key) {{
+        case "ArrowRight":
+            document.getElementById("{NEXT}").click()
+            break
+        case "ArrowLeft":
+            document.getElementById("{PREV}").click()
+            break
+        case 'Backspace':
+            document.getElementById("{BACK}").click()
+            break
+        case '.':
+        case '/':
+            document.getElementById("{LOGOUT}").click()
+            break
+    }}
+}}
 </script>'''
 
 
@@ -207,7 +230,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         </head>
         <body>
             {LOGOUT_EL}
-            {'' if self.path == '/' else '<a style="margin-left: 5px" href="..">Back</a>'}
+            {'' if self.path == '/' else f'<a id="{BACK}" style="margin-left: 5px" href="..">Back</a>'}
             <a href="{PROCESS_NOT_ENCRYPTED_REQUEST}" style="margin-left: 5px">Process not encrypted</a>
             <a href="{CHANGE_PASSWORD_PAGE}" style="margin-left: 5px">Change password</a>
             <a href="{CLEAR_TEMP_REQUEST}" style="margin-left: 5px">Clear temp</a>
@@ -223,7 +246,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                 <input type="submit" value="Create"/>
             </form>
             <br/>
-            {AUTO_LOGOUT_EL}
+            {COMMON_SCRIPT}
         ''']
 
         directory = Directory(self.translate_path(self.path))
@@ -298,7 +321,6 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             else:
                 prev_page = file.relative_path
 
-        # language=HTML
         resp = [f'''
         <!DOCTYPE html>
         <html lang="en">
@@ -307,12 +329,12 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
         </head>
         <body>
             {LOGOUT_EL}
-            <a style="margin-left: 5px" href=".">Back</a>
+            <a id="{BACK}" style="margin-left: 5px" href=".">Back</a>
         ''']
         if prev_page:
-            resp.append(f'<a style="margin-left: 5px" href="{prev_page}">Prev</a>')
+            resp.append(f'<a id="{PREV}" style="margin-left: 5px" href="{prev_page}">Prev</a>')
         if next_page:
-            resp.append(f'<a style="margin-left: 5px" href="{next_page}">Next</a>')
+            resp.append(f'<a id="{NEXT}" style="margin-left: 5px" href="{next_page}">Next</a>')
         resp.append(f'<h2>Current file: {decrypt_path(KEY, self.path)}</h2>')
 
         fyle_type = self.guess_type(decrypt_name(KEY, name))[0]
@@ -356,7 +378,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             resp.append('</pre>')
 
         resp.append(f'''
-            {AUTO_LOGOUT_EL}
+            {COMMON_SCRIPT}
         </body>
         </html>
         ''')
@@ -374,9 +396,14 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             </head>
             <body>
                 <form method="POST" action="{LOGIN_PAGE}">
-                    <input required name="{PASSWORD_PARAM}" placeholder="Password" type="password"/>
+                    <input id="password" required name="{PASSWORD_PARAM}" placeholder="Password" type="password"/>
                     <input type="submit" value="Login"/>
                 </form>
+                <script>
+                window.onload = () => {{
+                    document.getElementById("password").focus();
+                }}
+                </script>
             </body>
             </html>
             '''])
