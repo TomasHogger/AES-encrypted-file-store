@@ -64,18 +64,17 @@ document.querySelectorAll("video").forEach(it => {{
 }})
 
 window.onkeydown = (event) => {{
-    switch (event.key) {{
-        case "ArrowRight":
+    switch (event.code) {{
+        case "Period":
             document.getElementById("{NEXT}").click()
             break
-        case "ArrowLeft":
+        case "Comma":
             document.getElementById("{PREV}").click()
             break
-        case 'Backspace':
+        case 'Semicolon':
             document.getElementById("{BACK}").click()
             break
-        case '.':
-        case '/':
+        case 'Quote':
             document.getElementById("{LOGOUT}").click()
             break
     }}
@@ -341,32 +340,37 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
         if fyle_type == 'v':
             resp.append(f'''
-            <video style="max-width: 1200px; max-height: 720px" src="{name}" reload="auto" controls>
+            <video id="video" autoplay="autoplay" style="max-width: 1200px; max-height: 720px" src="{name}"
+            reload="auto" controls>
                 <source src="{name}"/>
             </video>
             ''')
+            # language=HTML
+            resp.append('''<script>
+                window.onload = () => {{
+                    document.getElementById("video").focus();
+                }}
+                </script>''')
         elif fyle_type == 'i':
             resp.append(f'<img id="image" src="{name}"/>')
-            resp.append(
-                # language=HTML
-                '''<script>
-                let image = document.getElementById('image'),
+            # language=HTML
+            resp.append('''<script>
+                let image = document.getElementById("image"),
                     flag = true;
 
-                image.style['max-width'] = '1200px';
-                image.style['max-height'] = '720px';
+                image.style["max-width"] = '1200px';
+                image.style["max-height"] = '720px';
                 image.onclick = () => {
                     if (flag) {
-                        image.style['max-width'] = null;
-                        image.style['max-height'] = null;
+                        image.style["max-width"] = null;
+                        image.style["max-height"] = null;
                     } else {
-                        image.style['max-width'] = '1200px';
-                        image.style['max-height'] = '720px';
+                        image.style["max-width"] = "1200px";
+                        image.style["max-height"] = "720px";
                     }
                     flag = !flag;
                 }
-                </script>'''
-            )
+                </script>''')
         else:
             resp.append('<pre>')
 
