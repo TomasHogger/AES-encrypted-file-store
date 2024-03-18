@@ -7,7 +7,7 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
-from typing import Optional
+from typing import Optional, Tuple
 from urllib import parse
 
 from Crypto import Random
@@ -36,6 +36,7 @@ SAVE_REQUEST = 'save'
 CREATE_REQUEST = 'create'
 PROCESS_NOT_ENCRYPTED_REQUEST = 'process_not_encrypted'
 CLEAR_TEMP_REQUEST = 'clear_temp'
+DELETE_REQUEST = 'delete'
 
 PASSWORD_PARAM = "password"
 AGAIN_PARAM = "again"
@@ -118,6 +119,27 @@ class Directory:
 
     def sorted_files(self) -> list[DirectoryEntry]:
         return sorted(self.files, key=lambda x: x.name)
+
+    def get_prev_and_next_file(
+        self,
+        relative_path: str
+    ) -> Tuple[Optional[DirectoryEntry], Optional[DirectoryEntry]]:
+        prev_file = None
+        next_file = None
+        stop = False
+
+        for file in self.sorted_files():
+            if os.path.isdir(self.path.joinpath(file.relative_path)):
+                continue
+            elif stop:
+                next_file = file
+                break
+            elif file.relative_path == relative_path:
+                stop = True
+            else:
+                prev_file = file
+
+        return prev_file, next_file
 
 
 def validate_timeout():
@@ -234,6 +256,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             <a href="{CHANGE_PASSWORD_PAGE}" style="margin-left: 5px">Change password</a>
             <a href="{CLEAR_TEMP_REQUEST}" style="margin-left: 5px">Clear temp</a>
             <br/>
+            <br/><a href="{DELETE_REQUEST}">Delete</a>
             <h2>Current Directory: {decrypt_path(KEY, self.path)}</h2>
 
             <form method="POST" action="{SAVE_REQUEST}" enctype=multipart/form-data>
@@ -302,23 +325,10 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
     def send_page(self):
         path = Path(self.translate_path(self.path))
-        name = path.name
+        relative_path = path.name
         directory = Directory(path.parent)
 
-        prev_page = None
-        next_page = None
-        stop = False
-
-        for file in directory.sorted_files():
-            if os.path.isdir(directory.path.joinpath(file.relative_path)):
-                continue
-            elif stop:
-                next_page = file.relative_path
-                break
-            elif file.relative_path == name:
-                stop = True
-            else:
-                prev_page = file.relative_path
+        (prev_file, next_file) = directory.get_prev_and_next_file(relative_path)
 
         resp = [f'''
         <!DOCTYPE html>
@@ -330,19 +340,20 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             {LOGOUT_EL}
             <a id="{BACK}" style="margin-left: 5px" href=".">Back</a>
         ''']
-        if prev_page:
-            resp.append(f'<a id="{PREV}" style="margin-left: 5px" href="{prev_page}">Prev</a>')
-        if next_page:
-            resp.append(f'<a id="{NEXT}" style="margin-left: 5px" href="{next_page}">Next</a>')
+        if prev_file:
+            resp.append(f'<a id="{PREV}" style="margin-left: 5px" href="{prev_file.relative_path}">Prev</a>')
+        if next_file:
+            resp.append(f'<a id="{NEXT}" style="margin-left: 5px" href="{next_file.relative_path}">Next</a>')
+        resp.append(f'<br/><a href="{self.path + "/" + DELETE_REQUEST}">Delete</a>')
         resp.append(f'<h2>Current file: {decrypt_path(KEY, self.path)}</h2>')
 
-        fyle_type = self.guess_type(decrypt_name(KEY, name))[0]
+        fyle_type = self.guess_type(decrypt_name(KEY, relative_path))[0]
 
         if fyle_type == 'v':
             resp.append(f'''
-            <video id="video" autoplay="autoplay" style="max-width: 1200px; max-height: 720px" src="{name}"
+            <video id="video" autoplay="autoplay" style="max-width: 1200px; max-height: 720px" src="{relative_path}"
             reload="auto" controls>
-                <source src="{name}"/>
+                <source src="{relative_path}"/>
             </video>
             ''')
             # language=HTML
@@ -352,7 +363,7 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                 }}
                 </script>''')
         elif fyle_type == 'i':
-            resp.append(f'<img id="image" src="{name}"/>')
+            resp.append(f'<img id="image" src="{relative_path}"/>')
             # language=HTML
             resp.append('''<script>
                 let image = document.getElementById("image"),
@@ -510,6 +521,25 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                     exist_ok=True)
         self.send_preview_page()
 
+    def process_delete(self):
+        path = self.path.replace('/' + DELETE_REQUEST, '')
+        path = self.translate_path(path)
+        path = Path(path)
+
+        (prev_file, next_file) = Directory(path.parent).get_prev_and_next_file(path.name)
+
+        location = '..'
+
+        if next_file:
+            location += '/' + next_file.relative_path
+        elif prev_file:
+            location += '/' + prev_file.relative_path
+
+        self.send_response(302)
+        self.add_default_headers()
+        self.send_header('Location', location)
+        self.end_headers()
+
     def do_POST(self):
         global KEY
 
@@ -539,8 +569,6 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             self.send_response(404)
         except ValueError as e:
             print(e)
-            KEY = None
-            self.send_redirect_login()
 
     def do_GET(self):
         global KEY
@@ -571,6 +599,10 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
                 self.send_change_password()
                 return
 
+            if self.path.endswith(DELETE_REQUEST):
+                self.process_delete()
+                return
+
             path = self.translate_path(self.path)
 
             if not os.path.exists(path):
@@ -589,8 +621,6 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
             self.send_page()
         except ValueError as e:
             print(e)
-            KEY = None
-            self.send_login()
 
 
 if __name__ == '__main__':
