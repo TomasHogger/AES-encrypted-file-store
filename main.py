@@ -528,6 +528,8 @@ class CustomRequestHandler(SimpleHTTPRequestHandler):
 
         (prev_file, next_file) = Directory(path.parent).get_prev_and_next_file(path.name)
 
+        os.remove(path)
+
         location = '..'
 
         if next_file:
